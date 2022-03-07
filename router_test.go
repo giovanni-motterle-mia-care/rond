@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
 
 	"github.com/gorilla/mux"
 	"gotest.tools/v3/assert"
