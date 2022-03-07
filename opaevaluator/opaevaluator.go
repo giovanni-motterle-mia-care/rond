@@ -13,9 +13,9 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/opatranslator"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/custom_builtins"
 

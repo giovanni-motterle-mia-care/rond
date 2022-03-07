@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
 
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"

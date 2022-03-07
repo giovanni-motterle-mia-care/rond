@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
 
 	"github.com/mia-platform/glogger/v2"
 	"github.com/sirupsen/logrus"
