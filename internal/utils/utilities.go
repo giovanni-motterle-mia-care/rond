@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"encoding/json"
@@ -11,15 +11,15 @@ import (
 const ContentTypeHeaderKey = "content-type"
 const JSONContentTypeHeader = "application/json"
 
-func hasApplicationJSONContentType(headers http.Header) bool {
+func HasApplicationJSONContentType(headers http.Header) bool {
 	return strings.HasPrefix(headers.Get(ContentTypeHeaderKey), JSONContentTypeHeader)
 }
 
-func failResponse(w http.ResponseWriter, technicalError, businessError string) {
-	failResponseWithCode(w, http.StatusInternalServerError, technicalError, businessError)
+func FailResponse(w http.ResponseWriter, technicalError, businessError string) {
+	FailResponseWithCode(w, http.StatusInternalServerError, technicalError, businessError)
 }
 
-func failResponseWithCode(w http.ResponseWriter, statusCode int, technicalError, businessError string) {
+func FailResponseWithCode(w http.ResponseWriter, statusCode int, technicalError, businessError string) {
 	w.WriteHeader(statusCode)
 	content, err := json.Marshal(types.RequestError{
 		StatusCode: statusCode,
@@ -34,7 +34,7 @@ func failResponseWithCode(w http.ResponseWriter, statusCode int, technicalError,
 	w.Write(content)
 }
 
-func unmarshalHeader(headers http.Header, headerKey string, v interface{}) (bool, error) {
+func UnmarshalHeader(headers http.Header, headerKey string, v interface{}) (bool, error) {
 	headerValueStringified := headers.Get(headerKey)
 	if headerValueStringified != "" {
 		err := json.Unmarshal([]byte(headerValueStringified), &v)

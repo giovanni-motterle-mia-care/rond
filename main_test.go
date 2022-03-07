@@ -19,7 +19,10 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
@@ -620,7 +623,7 @@ func TestEntrypoint(t *testing.T) {
 			req, err := http.NewRequest("GET", "http://localhost:3003/users/", nil)
 			req.Header.Set("miauserid", "user1")
 			req.Header.Set("miausergroups", "user1,user2")
-			req.Header.Set(ContentTypeHeaderKey, "application/json")
+			req.Header.Set(utils.ContentTypeHeaderKey, "application/json")
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			require.Equal(t, "user1", resp.Header.Get("someuserheader"))
@@ -664,7 +667,7 @@ func TestEntrypoint(t *testing.T) {
 			req, err := http.NewRequest("GET", "http://localhost:3003/with-mongo-find-one/some-project", nil)
 			req.Header.Set("miauserid", "user1")
 			req.Header.Set("miausergroups", "user1,user2")
-			req.Header.Set(ContentTypeHeaderKey, "application/json")
+			req.Header.Set(utils.ContentTypeHeaderKey, "application/json")
 			client := &http.Client{}
 			resp, err := client.Do(req)
 
@@ -699,7 +702,7 @@ func TestEntrypoint(t *testing.T) {
 			req, err := http.NewRequest("GET", "http://localhost:3003/with-mongo-find-many/some-project", nil)
 			req.Header.Set("miauserid", "user1")
 			req.Header.Set("miausergroups", "user1,user2")
-			req.Header.Set(ContentTypeHeaderKey, "application/json")
+			req.Header.Set(utils.ContentTypeHeaderKey, "application/json")
 			client := &http.Client{}
 			resp, err := client.Do(req)
 
@@ -1111,17 +1114,17 @@ func TestSetupRouterStandaloneMode(t *testing.T) {
 		TargetServiceHost:    "my-service:4444",
 		PathPrefixStandalone: "/my-prefix",
 	}
-	opa := &OPAModuleConfig{
+	opa := &opaevaluator.OPAModuleConfig{
 		Name: "policies",
 		Content: `package policies
 test_policy { true }
 `,
 	}
-	oas := &OpenAPISpec{
-		Paths: OpenAPIPaths{
-			"/evalapi": PathVerbs{
-				"get": VerbConfig{
-					XPermission{
+	oas := &openapi.OpenAPISpec{
+		Paths: openapi.OpenAPIPaths{
+			"/evalapi": openapi.PathVerbs{
+				"get": openapi.VerbConfig{
+					Permission: openapi.XPermission{
 						AllowPermission: "test_policy",
 					},
 				},
@@ -1130,7 +1133,7 @@ test_policy { true }
 	}
 
 	var mongoClient *mongoclient.MongoClient
-	evaluatorsMap, err := setupEvaluators(context.TODO(), mongoClient, oas, opa)
+	evaluatorsMap, err := opaevaluator.SetupEvaluators(context.TODO(), mongoClient, oas, opa)
 	assert.NilError(t, err, "unexpected error")
 
 	router, err := setupRouter(log, env, opa, oas, evaluatorsMap, mongoClient)

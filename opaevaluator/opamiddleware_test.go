@@ -1,4 +1,4 @@
-package main
+package opaevaluator
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
+
 	"github.com/stretchr/testify/require"
 	"gotest.tools/v3/assert"
 )
@@ -24,10 +26,10 @@ func TestOPAMiddleware(t *testing.T) {
 			Content: `package policies
 todo { true }`,
 		}
-		var openAPISpec *OpenAPISpec
+		var openAPISpec *openapi.OpenAPISpec
 		openAPISpecContent, _ := ioutil.ReadFile("./mocks/simplifiedMock.json")
 		_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
-		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 
 		t.Run(`missing oas paths`, func(t *testing.T) {
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,14 +76,14 @@ foobar { true }`,
 		}
 
 		t.Run(`ok - path is known on oas with no permission declared`, func(t *testing.T) {
-			var openAPISpec *OpenAPISpec
+			var openAPISpec *openapi.OpenAPISpec
 			openAPISpecContent, err := ioutil.ReadFile("./mocks/documentationPathMock.json")
 			assert.NilError(t, err)
 			_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
 			var envs = config.EnvironmentVariables{
 				TargetServiceOASPath: "/documentation/json",
 			}
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -94,14 +96,14 @@ foobar { true }`,
 		})
 
 		t.Run(`ok - path is missing on oas and request is equal to serviceTargetOASPath`, func(t *testing.T) {
-			var openAPISpec *OpenAPISpec
+			var openAPISpec *openapi.OpenAPISpec
 			openAPISpecContent, err := ioutil.ReadFile("./mocks/simplifiedMock.json")
 			assert.NilError(t, err)
 			_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
 			var envs = config.EnvironmentVariables{
 				TargetServiceOASPath: "/documentation/json",
 			}
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -114,14 +116,14 @@ foobar { true }`,
 		})
 
 		t.Run(`ok - path is NOT known on oas but is proxied anyway`, func(t *testing.T) {
-			var openAPISpec *OpenAPISpec
+			var openAPISpec *openapi.OpenAPISpec
 			openAPISpecContent, err := ioutil.ReadFile("./mocks/simplifiedMock.json")
 			assert.NilError(t, err)
 			_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
 			var envs = config.EnvironmentVariables{
 				TargetServiceOASPath: "/documentation/custom/json",
 			}
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -135,7 +137,7 @@ foobar { true }`,
 	})
 
 	t.Run(`injects opa instance with correct query`, func(t *testing.T) {
-		var openAPISpec *OpenAPISpec
+		var openAPISpec *openapi.OpenAPISpec
 		openAPISpecContent, _ := ioutil.ReadFile("./mocks/simplifiedMock.json")
 		_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
 
@@ -146,11 +148,11 @@ foobar { true }`,
 todo { true }`,
 			}
 
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				permission, err := GetXPermission(r.Context())
+				permission, err := openapi.GetXPermission(r.Context())
 				require.True(t, err == nil, "Unexpected error")
-				require.Equal(t, permission, &XPermission{AllowPermission: "todo"})
+				require.Equal(t, permission, &openapi.XPermission{AllowPermission: "todo"})
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -168,11 +170,11 @@ todo { true }`,
 foobar { true }`,
 			}
 
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				permission, err := GetXPermission(r.Context())
+				permission, err := openapi.GetXPermission(r.Context())
 				require.True(t, err == nil, "Unexpected error")
-				require.Equal(t, permission, &XPermission{AllowPermission: "todo"})
+				require.Equal(t, permission, &openapi.XPermission{AllowPermission: "todo"})
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -190,11 +192,11 @@ foobar { true }`,
 very_very_composed_permission { true }`,
 			}
 
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				permission, err := GetXPermission(r.Context())
+				permission, err := openapi.GetXPermission(r.Context())
 				require.True(t, err == nil, "Unexpected error")
-				require.Equal(t, &XPermission{AllowPermission: "very.very.composed.permission"}, permission)
+				require.Equal(t, &openapi.XPermission{AllowPermission: "very.very.composed.permission"}, permission)
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -217,11 +219,11 @@ very_very_composed_permission_with_eval { true }`,
 				PathPrefixStandalone: "/eval", // default value
 			}
 
-			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+			middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 			builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				permission, err := GetXPermission(r.Context())
+				permission, err := openapi.GetXPermission(r.Context())
 				require.True(t, err == nil, "Unexpected error")
-				require.Equal(t, &XPermission{AllowPermission: "very.very.composed.permission.with.eval"}, permission)
+				require.Equal(t, &openapi.XPermission{AllowPermission: "very.very.composed.permission.with.eval"}, permission)
 				w.WriteHeader(http.StatusOK)
 			}))
 
@@ -235,7 +237,7 @@ very_very_composed_permission_with_eval { true }`,
 }
 
 func TestOPAMiddlewareStandaloneIntegration(t *testing.T) {
-	var openAPISpec *OpenAPISpec
+	var openAPISpec *openapi.OpenAPISpec
 	openAPISpecContent, _ := ioutil.ReadFile("./mocks/simplifiedMock.json")
 	_ = json.Unmarshal(openAPISpecContent, &openAPISpec)
 
@@ -251,11 +253,11 @@ func TestOPAMiddlewareStandaloneIntegration(t *testing.T) {
 			very_very_composed_permission { true }`,
 		}
 
-		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 		builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			permission, err := GetXPermission(r.Context())
+			permission, err := openapi.GetXPermission(r.Context())
 			require.True(t, err == nil, "Unexpected error")
-			require.Equal(t, &XPermission{AllowPermission: "very.very.composed.permission"}, permission)
+			require.Equal(t, &openapi.XPermission{AllowPermission: "very.very.composed.permission"}, permission)
 			w.WriteHeader(http.StatusOK)
 		}))
 
@@ -273,11 +275,11 @@ func TestOPAMiddlewareStandaloneIntegration(t *testing.T) {
 very_very_composed_permission_with_eval { true }`,
 		}
 
-		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators)
+		middleware := OPAMiddleware(opaModule, openAPISpec, &envs, partialEvaluators, []string{})
 		builtHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			permission, err := GetXPermission(r.Context())
+			permission, err := openapi.GetXPermission(r.Context())
 			require.True(t, err == nil, "Unexpected error")
-			require.Equal(t, &XPermission{AllowPermission: "very.very.composed.permission.with.eval"}, permission)
+			require.Equal(t, &openapi.XPermission{AllowPermission: "very.very.composed.permission.with.eval"}, permission)
 			w.WriteHeader(http.StatusOK)
 		}))
 

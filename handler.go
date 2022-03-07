@@ -9,6 +9,10 @@ import (
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/opatranslator"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 
 	"github.com/mia-platform/glogger/v2"
 	"github.com/sirupsen/logrus"
@@ -16,7 +20,6 @@ import (
 
 const URL_SCHEME = "http"
 const BASE_ROW_FILTER_HEADER_KEY = "acl_rows"
-const GENERIC_BUSINESS_ERROR_MESSAGE = "Internal server error, please try again later"
 const NO_PERMISSIONS_ERROR_MESSAGE = "You do not have permissions to access this feature, contact the project administrator for more information."
 
 func ReverseProxyOrResponse(
@@ -24,8 +27,8 @@ func ReverseProxyOrResponse(
 	env config.EnvironmentVariables,
 	w http.ResponseWriter,
 	req *http.Request,
-	permission *XPermission,
-	partialResultsEvaluators PartialResultsEvaluators,
+	permission *openapi.XPermission,
+	partialResultsEvaluators opaevaluator.PartialResultsEvaluators,
 ) {
 	if env.Standalone {
 		w.Header().Set(BASE_ROW_FILTER_HEADER_KEY, req.Header.Get(BASE_ROW_FILTER_HEADER_KEY))
@@ -43,20 +46,20 @@ func rbacHandler(w http.ResponseWriter, req *http.Request) {
 	env, err := config.GetEnv(requestContext)
 	if err != nil {
 		logger.WithError(err).Error("no env found in context")
-		failResponse(w, "No environment found in context", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponse(w, "No environment found in context", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return
 	}
 
-	permission, err := GetXPermission(requestContext)
+	permission, err := openapi.GetXPermission(requestContext)
 	if err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("no policy permission found in context")
-		failResponse(w, "no policy permission found in context", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponse(w, "no policy permission found in context", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return
 	}
-	partialResultEvaluators, err := GetPartialResultsEvaluators(requestContext)
+	partialResultEvaluators, err := opaevaluator.GetPartialResultsEvaluators(requestContext)
 	if err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("no partialResult evaluators found in context")
-		failResponse(w, "no partialResult evaluators found in context", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponse(w, "no partialResult evaluators found in context", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return
 	}
 
@@ -66,52 +69,58 @@ func rbacHandler(w http.ResponseWriter, req *http.Request) {
 	ReverseProxyOrResponse(logger, env, w, req, permission, partialResultEvaluators)
 }
 
-func EvaluateRequest(req *http.Request, env config.EnvironmentVariables, w http.ResponseWriter, partialResultsEvaluators PartialResultsEvaluators, permission *XPermission) error {
+func EvaluateRequest(
+	req *http.Request,
+	env config.EnvironmentVariables,
+	w http.ResponseWriter,
+	partialResultsEvaluators opaevaluator.PartialResultsEvaluators,
+	permission *openapi.XPermission,
+) error {
 	requestContext := req.Context()
 	logger := glogger.Get(requestContext)
 
 	userInfo, err := mongoclient.RetrieveUserBindingsAndRoles(logger, req, env)
 	if err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("failed user bindings and roles retrieving")
-		failResponseWithCode(w, http.StatusInternalServerError, "user bindings retrieval failed", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponseWithCode(w, http.StatusInternalServerError, "user bindings retrieval failed", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return err
 	}
 
-	input, err := createRegoQueryInput(req, env, userInfo, nil)
+	input, err := opaevaluator.CreateRegoQueryInput(req, env, userInfo, nil)
 	if err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("failed rego query input creation")
-		failResponseWithCode(w, http.StatusInternalServerError, "RBAC input creation failed", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponseWithCode(w, http.StatusInternalServerError, "RBAC input creation failed", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return err
 	}
 
-	var evaluatorAllowPolicy *OPAEvaluator
+	var evaluatorAllowPolicy *opaevaluator.OPAEvaluator
 	if !permission.ResourceFilter.RowFilter.Enabled {
 		evaluatorAllowPolicy, err = partialResultsEvaluators.GetEvaluatorFromPolicy(requestContext, permission.AllowPermission, input)
 		if err != nil {
 			logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("cannot find policy evaluator")
-			failResponseWithCode(w, http.StatusInternalServerError, "failed partial evaluator retrieval", GENERIC_BUSINESS_ERROR_MESSAGE)
+			utils.FailResponseWithCode(w, http.StatusInternalServerError, "failed partial evaluator retrieval", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 			return err
 		}
 	} else {
-		evaluatorAllowPolicy, err = createQueryEvaluator(requestContext, logger, req, env, permission.AllowPermission, input, nil)
+		evaluatorAllowPolicy, err = opaevaluator.CreateQueryEvaluator(requestContext, logger, req, env, permission.AllowPermission, input, nil)
 		if err != nil {
 			logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("cannot create evaluator")
-			failResponseWithCode(w, http.StatusForbidden, "RBAC policy evaluator creation failed", NO_PERMISSIONS_ERROR_MESSAGE)
+			utils.FailResponseWithCode(w, http.StatusForbidden, "RBAC policy evaluator creation failed", NO_PERMISSIONS_ERROR_MESSAGE)
 			return err
 		}
 	}
 
 	_, query, err := evaluatorAllowPolicy.PolicyEvaluation(logger, permission)
 	if err != nil {
-		if errors.Is(err, opatranslator.ErrEmptyQuery) && hasApplicationJSONContentType(req.Header) {
+		if errors.Is(err, opatranslator.ErrEmptyQuery) && utils.HasApplicationJSONContentType(req.Header) {
 			w.WriteHeader(http.StatusOK)
-			w.Header().Set(ContentTypeHeaderKey, JSONContentTypeHeader)
+			w.Header().Set(utils.ContentTypeHeaderKey, utils.JSONContentTypeHeader)
 			w.Write([]byte("[]"))
 			return err
 		}
 
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("RBAC policy evaluation failed")
-		failResponseWithCode(w, http.StatusForbidden, "RBAC policy evaluation failed", NO_PERMISSIONS_ERROR_MESSAGE)
+		utils.FailResponseWithCode(w, http.StatusForbidden, "RBAC policy evaluation failed", NO_PERMISSIONS_ERROR_MESSAGE)
 		return err
 	}
 	var queryToProxy = []byte{}
@@ -119,7 +128,7 @@ func EvaluateRequest(req *http.Request, env config.EnvironmentVariables, w http.
 		queryToProxy, err = json.Marshal(query)
 		if err != nil {
 			logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("Error while marshaling row filter query")
-			failResponseWithCode(w, http.StatusForbidden, "Error while marshaling row filter query", GENERIC_BUSINESS_ERROR_MESSAGE)
+			utils.FailResponseWithCode(w, http.StatusForbidden, "Error while marshaling row filter query", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 			return err
 		}
 	}
@@ -134,7 +143,14 @@ func EvaluateRequest(req *http.Request, env config.EnvironmentVariables, w http.
 	return nil
 }
 
-func ReverseProxy(logger *logrus.Entry, env config.EnvironmentVariables, w http.ResponseWriter, req *http.Request, permission *XPermission, partialResultsEvaluators PartialResultsEvaluators) {
+func ReverseProxy(
+	logger *logrus.Entry,
+	env config.EnvironmentVariables,
+	w http.ResponseWriter,
+	req *http.Request,
+	permission *openapi.XPermission,
+	partialResultsEvaluators opaevaluator.PartialResultsEvaluators,
+) {
 	targetHostFromEnv := env.TargetServiceHost
 	proxy := httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -169,7 +185,7 @@ func alwaysProxyHandler(w http.ResponseWriter, req *http.Request) {
 	env, err := config.GetEnv(requestContext)
 	if err != nil {
 		glogger.Get(requestContext).WithError(err).Error("no env found in context")
-		failResponse(w, "no environment found in context", GENERIC_BUSINESS_ERROR_MESSAGE)
+		utils.FailResponse(w, "no environment found in context", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return
 	}
 	ReverseProxyOrResponse(logger, env, w, req, nil, nil)

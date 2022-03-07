@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,8 +9,9 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mocks"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 
 	"github.com/gorilla/mux"
 	"gotest.tools/v3/assert"
@@ -24,14 +23,14 @@ func TestSetupRoutes(t *testing.T) {
 	}
 	t.Run("expect to register route correctly", func(t *testing.T) {
 		router := mux.NewRouter()
-		oas := &OpenAPISpec{
-			Paths: OpenAPIPaths{
-				"/foo":        PathVerbs{},
-				"/bar":        PathVerbs{},
-				"/foo/bar":    PathVerbs{},
-				"/-/ready":    PathVerbs{},
-				"/-/healthz":  PathVerbs{},
-				"/-/check-up": PathVerbs{},
+		oas := &openapi.OpenAPISpec{
+			Paths: openapi.OpenAPIPaths{
+				"/foo":        openapi.PathVerbs{},
+				"/bar":        openapi.PathVerbs{},
+				"/foo/bar":    openapi.PathVerbs{},
+				"/-/ready":    openapi.PathVerbs{},
+				"/-/healthz":  openapi.PathVerbs{},
+				"/-/check-up": openapi.PathVerbs{},
 			},
 		}
 		expectedPaths := []string{"/", "/-/check-up", "/-/healthz", "/-/ready", "/bar", "/documentation/json", "/foo", "/foo/bar"}
@@ -55,16 +54,16 @@ func TestSetupRoutes(t *testing.T) {
 
 	t.Run("expect to register nested route correctly", func(t *testing.T) {
 		router := mux.NewRouter()
-		oas := &OpenAPISpec{
-			Paths: OpenAPIPaths{
-				"/-/ready":    PathVerbs{},
-				"/-/healthz":  PathVerbs{},
-				"/-/check-up": PathVerbs{},
+		oas := &openapi.OpenAPISpec{
+			Paths: openapi.OpenAPIPaths{
+				"/-/ready":    openapi.PathVerbs{},
+				"/-/healthz":  openapi.PathVerbs{},
+				"/-/check-up": openapi.PathVerbs{},
 				// General route
-				"/foo/*":          PathVerbs{},
-				"/foo/bar/*":      PathVerbs{},
-				"/foo/bar/nested": PathVerbs{},
-				"/foo/bar/:barId": PathVerbs{},
+				"/foo/*":          openapi.PathVerbs{},
+				"/foo/bar/*":      openapi.PathVerbs{},
+				"/foo/bar/nested": openapi.PathVerbs{},
+				"/foo/bar/:barId": openapi.PathVerbs{},
 			},
 		}
 		expectedPaths := []string{"/", "/-/ready", "/-/healthz", "/-/check-up", "/foo/", "/foo/bar/", "/foo/bar/nested", "/foo/bar/{barId}", "/documentation/json"}
@@ -94,13 +93,13 @@ func TestSetupRoutes(t *testing.T) {
 			PathPrefixStandalone: "/validate",
 		}
 		router := mux.NewRouter()
-		oas := &OpenAPISpec{
-			Paths: OpenAPIPaths{
-				"/documentation/json": PathVerbs{},
-				"/foo/*":              PathVerbs{},
-				"/foo/bar/*":          PathVerbs{},
-				"/foo/bar/nested":     PathVerbs{},
-				"/foo/bar/:barId":     PathVerbs{},
+		oas := &openapi.OpenAPISpec{
+			Paths: openapi.OpenAPIPaths{
+				"/documentation/json": openapi.PathVerbs{},
+				"/foo/*":              openapi.PathVerbs{},
+				"/foo/bar/*":          openapi.PathVerbs{},
+				"/foo/bar/nested":     openapi.PathVerbs{},
+				"/foo/bar/:barId":     openapi.PathVerbs{},
 			},
 		}
 		expectedPaths := []string{"/validate/", "/validate/documentation/json", "/validate/foo/", "/validate/foo/bar/", "/validate/foo/bar/nested", "/validate/foo/bar/{barId}"}
@@ -124,86 +123,18 @@ func TestSetupRoutes(t *testing.T) {
 	})
 }
 
-func TestConvertPathVariables(t *testing.T) {
-	listOfPaths := []struct {
-		Path          string
-		ConvertedPath string
-	}{
-		{Path: "/", ConvertedPath: "/"},
-		{Path: "/endpoint-1", ConvertedPath: "/endpoint-1"},
-		{Path: "/endpoint-1/:id", ConvertedPath: "/endpoint-1/{id}"},
-		{Path: "/endpoint-1/:id/", ConvertedPath: "/endpoint-1/{id}/"},
-		{Path: "/endpoint-1/:id1/:id2/:id3", ConvertedPath: "/endpoint-1/{id1}/{id2}/{id3}"},
-		{Path: "/endpoint-1/", ConvertedPath: "/endpoint-1/"},
-		{Path: "/endpoint-1/:id/upsert", ConvertedPath: "/endpoint-1/{id}/upsert"},
-		{Path: "/external-endpoint/:id", ConvertedPath: "/external-endpoint/{id}"},
-		{Path: "/:another/external-endpoint", ConvertedPath: "/{another}/external-endpoint"},
-	}
-
-	t.Run("convert correctly paths", func(t *testing.T) {
-		for _, path := range listOfPaths {
-			convertedPath := convertPathVariablesToBrackets(path.Path)
-			assert.Equal(t, convertedPath, path.ConvertedPath, "Path not converted correctly.")
-		}
-	})
-}
-
-func TestConvertPathVariables2(t *testing.T) {
-	listOfPaths := []struct {
-		Path          string
-		ConvertedPath string
-	}{
-		{Path: "/", ConvertedPath: "/"},
-		{Path: "/endpoint-1", ConvertedPath: "/endpoint-1"},
-		{Path: "/endpoint-1/", ConvertedPath: "/endpoint-1/"},
-		{Path: "/endpoint-1/{id}", ConvertedPath: "/endpoint-1/:id"},
-		{Path: "/endpoint-1/{id}/", ConvertedPath: "/endpoint-1/:id/"},
-		{Path: "/endpoint-1/{id1}/{id2}/{id3}", ConvertedPath: "/endpoint-1/:id1/:id2/:id3"},
-		{Path: "/endpoint-1/{id}/upsert", ConvertedPath: "/endpoint-1/:id/upsert"},
-		{Path: "/:another/external-endpoint", ConvertedPath: "/:another/external-endpoint"},
-	}
-
-	t.Run("convert correctly paths", func(t *testing.T) {
-		for _, path := range listOfPaths {
-			convertedPath := convertPathVariablesToColons(path.Path)
-			assert.Equal(t, convertedPath, path.ConvertedPath, "Path not converted correctly.")
-		}
-	})
-}
-
-func createContext(
-	t *testing.T,
-	originalCtx context.Context,
-	env config.EnvironmentVariables,
-	mongoClient *mocks.MongoClientMock,
-	permission *XPermission,
-	opaModuleConfig *OPAModuleConfig,
-	partialResultEvaluators PartialResultsEvaluators,
-) context.Context {
-	t.Helper()
-
-	var partialContext context.Context
-	partialContext = context.WithValue(originalCtx, config.EnvKey{}, env)
-	partialContext = context.WithValue(partialContext, XPermissionKey{}, permission)
-	partialContext = context.WithValue(partialContext, OPAModuleConfigKey{}, opaModuleConfig)
-	if mongoClient != nil {
-		partialContext = context.WithValue(partialContext, types.MongoClientContextKey{}, mongoClient)
-	}
-	partialContext = context.WithValue(partialContext, PartialResultsEvaluatorConfigKey{}, partialResultEvaluators)
-
-	return partialContext
-}
-
-var mockOPAModule = &OPAModuleConfig{
+var mockOPAModule = &opaevaluator.OPAModuleConfig{
 	Name: "example.rego",
 	Content: `package policies
 todo { true }`,
 }
-var mockXPermission = &XPermission{AllowPermission: "todo"}
+var mockXPermission = &openapi.XPermission{AllowPermission: "todo"}
 
 func TestSetupRoutesIntegration(t *testing.T) {
-	oas := prepareOASFromFile(t, "./mocks/simplifiedMock.json")
-	mockPartialEvaluators, _ := setupEvaluators(context.Background(), nil, oas, mockOPAModule)
+	oas := openapi.PrepareOASFromFile(t, "./mocks/simplifiedMock.json")
+	mockPartialEvaluators, _ := opaevaluator.SetupEvaluators(context.Background(), nil, oas, mockOPAModule)
+	envs := config.EnvironmentVariables{}
+
 	t.Run("invokes known API", func(t *testing.T) {
 		var invoked bool
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +149,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 		setupRoutes(router, oas, envs)
 
 		serverURL, _ := url.Parse(server.URL)
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{TargetServiceHost: serverURL.Host},
 			nil,
@@ -255,7 +186,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 		setupRoutes(router, oas, envs)
 
 		serverURL, _ := url.Parse(server.URL)
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{TargetServiceHost: serverURL.Host},
 			nil,
@@ -279,16 +210,16 @@ func TestSetupRoutesIntegration(t *testing.T) {
 	})
 
 	t.Run("blocks request on not allowed policy evaluation", func(t *testing.T) {
-		var mockOPAModule = &OPAModuleConfig{
+		var mockOPAModule = &opaevaluator.OPAModuleConfig{
 			Name: "example.rego",
 			Content: `package policies
 		todo { false }`,
 		}
-		mockPartialEvaluators, _ := setupEvaluators(context.Background(), nil, oas, mockOPAModule)
+		mockPartialEvaluators, _ := opaevaluator.SetupEvaluators(context.Background(), nil, oas, mockOPAModule)
 		router := mux.NewRouter()
 		setupRoutes(router, oas, envs)
 
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{LogLevel: "silent", TargetServiceHost: "targetServiceHostWillNotBeInvoked"},
 			nil,
@@ -312,15 +243,15 @@ func TestSetupRoutesIntegration(t *testing.T) {
 
 	t.Run("blocks request on policy evaluation error", func(t *testing.T) {
 
-		var mockOPAModule = &OPAModuleConfig{
+		var mockOPAModule = &opaevaluator.OPAModuleConfig{
 			Content: "FAILING POLICY!!!!",
 		}
-		mockPartialEvaluators, _ := setupEvaluators(context.Background(), nil, oas, mockOPAModule)
+		mockPartialEvaluators, _ := opaevaluator.SetupEvaluators(context.Background(), nil, oas, mockOPAModule)
 
 		router := mux.NewRouter()
 		setupRoutes(router, oas, envs)
 
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{TargetServiceHost: "targetServiceHostWillNotBeInvoked"},
 			nil,
@@ -343,7 +274,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 	})
 
 	t.Run("invokes the API not explicitly set in the oas file", func(t *testing.T) {
-		oas := prepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
+		oas := openapi.PrepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
 
 		var invoked bool
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +287,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 		setupRoutes(router, oas, envs)
 
 		serverURL, _ := url.Parse(server.URL)
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{TargetServiceHost: serverURL.Host},
 			nil,
@@ -380,7 +311,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 	})
 
 	t.Run("invokes a specific API within a nested path", func(t *testing.T) {
-		oas := prepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
+		oas := openapi.PrepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
 
 		var invoked bool
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -393,7 +324,7 @@ func TestSetupRoutesIntegration(t *testing.T) {
 		setupRoutes(router, oas, envs)
 
 		serverURL, _ := url.Parse(server.URL)
-		ctx := createContext(t,
+		ctx := testutils.CreateContext(t,
 			context.Background(),
 			config.EnvironmentVariables{TargetServiceHost: serverURL.Host},
 			nil,
@@ -415,19 +346,4 @@ func TestSetupRoutesIntegration(t *testing.T) {
 		assert.Assert(t, invoked, "mock server was not invoked")
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 	})
-}
-
-func prepareOASFromFile(t *testing.T, filePath string) *OpenAPISpec {
-	t.Helper()
-
-	fileContent, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		t.Fatalf("Unexpected error: %s", err.Error())
-	}
-
-	var oas OpenAPISpec
-	if err := json.Unmarshal(fileContent, &oas); err != nil {
-		t.Fatalf("Unexpected error: %s", err.Error())
-	}
-	return &oas
 }

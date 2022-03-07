@@ -19,22 +19,23 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/standalone"
 
 	"github.com/gorilla/mux"
 )
 
 func addStandaloneRoutes(router *mux.Router) {
-	router.HandleFunc("/revoke/bindings/resource/{resourceType}", revokeHandler)
-	router.HandleFunc("/grant/bindings/resource/{resourceType}", grantHandler)
+	router.HandleFunc("/revoke/bindings/resource/{resourceType}", standalone.RevokeHandler)
+	router.HandleFunc("/grant/bindings/resource/{resourceType}", standalone.GrantHandler)
 }
 
-func setupRoutes(router *mux.Router, oas *OpenAPISpec, env config.EnvironmentVariables) {
+func setupRoutes(router *mux.Router, oas *openapi.OpenAPISpec, env config.EnvironmentVariables) {
 	var documentationPermission string
 	documentationPathInOAS := oas.Paths[env.TargetServiceOASPath]
 	if documentationPathInOAS != nil {
@@ -61,31 +62,19 @@ func setupRoutes(router *mux.Router, oas *OpenAPISpec, env config.EnvironmentVar
 		}
 		if strings.Contains(pathToRegister, "*") {
 			pathWithoutAsterisk := strings.ReplaceAll(pathToRegister, "*", "")
-			router.PathPrefix(convertPathVariablesToBrackets(pathWithoutAsterisk)).HandlerFunc(rbacHandler)
+			router.PathPrefix(utils.ConvertPathVariablesToBrackets(pathWithoutAsterisk)).HandlerFunc(rbacHandler)
 			continue
 		}
 		if path == env.TargetServiceOASPath && documentationPermission == "" {
-			router.HandleFunc(convertPathVariablesToBrackets(pathToRegister), alwaysProxyHandler)
+			router.HandleFunc(utils.ConvertPathVariablesToBrackets(pathToRegister), alwaysProxyHandler)
 			continue
 		}
-		router.HandleFunc(convertPathVariablesToBrackets(pathToRegister), rbacHandler)
+		router.HandleFunc(utils.ConvertPathVariablesToBrackets(pathToRegister), rbacHandler)
 	}
 	if documentationPathInOAS == nil {
-		router.HandleFunc(convertPathVariablesToBrackets(env.TargetServiceOASPath), alwaysProxyHandler)
+		router.HandleFunc(utils.ConvertPathVariablesToBrackets(env.TargetServiceOASPath), alwaysProxyHandler)
 	}
 	// FIXME: All the routes don't inserted above are anyway handled by rbacHandler.
 	//        Maybe the code above can be cleaned.
 	router.PathPrefix(fmt.Sprintf("%s/", env.PathPrefixStandalone)).HandlerFunc(rbacHandler)
-}
-
-var matchColons = regexp.MustCompile(`\/:(\w+)`)
-
-func convertPathVariablesToBrackets(path string) string {
-	return matchColons.ReplaceAllString(path, "/{$1}")
-}
-
-var matchBrackets = regexp.MustCompile(`\/{(\w+)}`)
-
-func convertPathVariablesToColons(path string) string {
-	return matchBrackets.ReplaceAllString(path, "/:$1")
 }

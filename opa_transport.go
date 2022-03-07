@@ -11,7 +11,10 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 
 	"github.com/sirupsen/logrus"
 )
@@ -22,8 +25,8 @@ type OPATransport struct {
 	logger                   *logrus.Entry
 	request                  *http.Request
 	env                      config.EnvironmentVariables
-	permission               *XPermission
-	partialResultsEvaluators PartialResultsEvaluators
+	permission               *openapi.XPermission
+	partialResultsEvaluators opaevaluator.PartialResultsEvaluators
 }
 
 func (t *OPATransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
@@ -49,8 +52,8 @@ func (t *OPATransport) RoundTrip(req *http.Request) (resp *http.Response, err er
 		return resp, nil
 	}
 
-	if !hasApplicationJSONContentType(resp.Header) {
-		t.logger.WithField("foundContentType", resp.Header.Get(ContentTypeHeaderKey)).Debug("found content type")
+	if !utils.HasApplicationJSONContentType(resp.Header) {
+		t.logger.WithField("foundContentType", resp.Header.Get(utils.ContentTypeHeaderKey)).Debug("found content type")
 		t.responseWithError(resp, fmt.Errorf("content-type is not application/json"), http.StatusInternalServerError)
 		return resp, nil
 	}
@@ -66,7 +69,7 @@ func (t *OPATransport) RoundTrip(req *http.Request) (resp *http.Response, err er
 		return resp, nil
 	}
 
-	input, err := createRegoQueryInput(t.request, t.env, userInfo, decodedBody)
+	input, err := opaevaluator.CreateRegoQueryInput(t.request, t.env, userInfo, decodedBody)
 	if err != nil {
 		t.responseWithError(resp, err, http.StatusInternalServerError)
 		return resp, nil
@@ -78,7 +81,7 @@ func (t *OPATransport) RoundTrip(req *http.Request) (resp *http.Response, err er
 		return resp, nil
 	}
 
-	bodyToProxy, err := evaluator.evaluate(t.logger)
+	bodyToProxy, err := evaluator.Evaluate(t.logger)
 	if err != nil {
 		t.responseWithError(resp, err, http.StatusForbidden)
 		return resp, nil
@@ -96,7 +99,7 @@ func (t *OPATransport) responseWithError(resp *http.Response, err error, statusC
 	t.logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("error while evaluating column filter query")
 	message := NO_PERMISSIONS_ERROR_MESSAGE
 	if statusCode != http.StatusForbidden {
-		message = GENERIC_BUSINESS_ERROR_MESSAGE
+		message = types.GENERIC_BUSINESS_ERROR_MESSAGE
 	}
 	content, _ := json.Marshal(types.RequestError{
 		StatusCode: statusCode,

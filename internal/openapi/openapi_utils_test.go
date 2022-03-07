@@ -1,4 +1,4 @@
-package main
+package openapi
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/h2non/gock.v1"
@@ -24,7 +26,7 @@ func TestFetchOpenAPI(t *testing.T) {
 
 		url := "http://localhost:3000/documentation/json"
 
-		openApiSpec, err := fetchOpenAPI(url)
+		openApiSpec, err := FetchOpenAPI(url)
 
 		assert.Assert(t, gock.IsDone(), "Mock has not been invoked")
 		assert.Assert(t, err == nil, "unexpected error")
@@ -66,19 +68,19 @@ func TestFetchOpenAPI(t *testing.T) {
 	t.Run("request execution fails for invalid URL", func(t *testing.T) {
 		url := "http://invalidUrl.com"
 
-		_, err := fetchOpenAPI(url)
+		_, err := FetchOpenAPI(url)
 
 		t.Logf("Expected error occurred: %s", err.Error())
-		assert.Assert(t, errors.Is(err, ErrRequestFailed), "unexpected error")
+		assert.Assert(t, errors.Is(err, types.ErrRequestFailed), "unexpected error")
 	})
 
 	t.Run("request execution fails for invalid URL syntax", func(t *testing.T) {
 		url := "	http://url with a tab.com"
 
-		_, err := fetchOpenAPI(url)
+		_, err := FetchOpenAPI(url)
 
 		t.Logf("Expected error occurred: %s", err.Error())
-		assert.Assert(t, errors.Is(err, ErrRequestFailed), "unexpected error")
+		assert.Assert(t, errors.Is(err, types.ErrRequestFailed), "unexpected error")
 	})
 
 	t.Run("request execution fails for unexpected server response", func(t *testing.T) {
@@ -91,10 +93,10 @@ func TestFetchOpenAPI(t *testing.T) {
 
 		url := "http://localhost:3000/documentation/json"
 
-		_, err := fetchOpenAPI(url)
+		_, err := FetchOpenAPI(url)
 
 		t.Logf("Expected error occurred: %s", err.Error())
-		assert.Assert(t, errors.Is(err, ErrRequestFailed), "unexpected error")
+		assert.Assert(t, errors.Is(err, types.ErrRequestFailed), "unexpected error")
 	})
 
 	t.Run("request execution fails for unexpected server response", func(t *testing.T) {
@@ -106,16 +108,16 @@ func TestFetchOpenAPI(t *testing.T) {
 
 		url := "http://localhost:3000/documentation/json"
 
-		_, err := fetchOpenAPI(url)
+		_, err := FetchOpenAPI(url)
 
 		t.Logf("Expected error occurred: %s", err.Error())
-		assert.Assert(t, errors.Is(err, ErrRequestFailed), "unexpected error")
+		assert.Assert(t, errors.Is(err, types.ErrRequestFailed), "unexpected error")
 	})
 }
 
 func TestLoadOASFile(t *testing.T) {
 	t.Run("get oas config from file", func(t *testing.T) {
-		openAPIFile, err := loadOASFile("./mocks/pathsConfig.json")
+		openAPIFile, err := LoadOASFile("./mocks/pathsConfig.json")
 		assert.Assert(t, err == nil, "unexpected error")
 		assert.Assert(t, openAPIFile != nil, "unexpected nil result")
 		assert.DeepEqual(t, openAPIFile.Paths, OpenAPIPaths{
@@ -144,7 +146,7 @@ func TestLoadOASFile(t *testing.T) {
 	})
 
 	t.Run("fail for invalid filePath", func(t *testing.T) {
-		_, err := loadOASFile("./notExistingFilePath.json")
+		_, err := LoadOASFile("./notExistingFilePath.json")
 
 		t.Logf("Expected error occurred: %s", err.Error())
 		assert.Assert(t, err != nil, "failed documentation file read")
@@ -160,7 +162,7 @@ func TestLoadOAS(t *testing.T) {
 			TargetServiceOASPath:   "/documentation/json",
 			APIPermissionsFilePath: "./mocks/pathsConfig.json",
 		}
-		openApiSpec, err := loadOAS(log, envs)
+		openApiSpec, err := LoadOAS(log, envs)
 		assert.Assert(t, err == nil, "unexpected error")
 		assert.Assert(t, openApiSpec != nil, "unexpected nil result")
 		assert.DeepEqual(t, openApiSpec.Paths, OpenAPIPaths{
@@ -200,7 +202,7 @@ func TestLoadOAS(t *testing.T) {
 			Reply(200).
 			File("./mocks/simplifiedMock.json")
 
-		openApiSpec, err := loadOAS(log, envs)
+		openApiSpec, err := LoadOAS(log, envs)
 		assert.Assert(t, gock.IsDone(), "Mock has not been invoked")
 		assert.Assert(t, err == nil, "unexpected error")
 		assert.Assert(t, openApiSpec != nil, "unexpected nil result")
@@ -242,7 +244,7 @@ func TestLoadOAS(t *testing.T) {
 		envs := config.EnvironmentVariables{
 			TargetServiceHost: "localhost:3000",
 		}
-		_, err := loadOAS(log, envs)
+		_, err := LoadOAS(log, envs)
 
 		t.Logf("Expected error occurred: %s", err.Error())
 		assert.Assert(t, err != nil, fmt.Errorf("missing environment variables one of %s or %s is required", config.TargetServiceOASPathEnvKey, config.APIPermissionsFilePathEnvKey))
@@ -251,7 +253,7 @@ func TestLoadOAS(t *testing.T) {
 
 func TestFindPermission(t *testing.T) {
 	t.Run("nested cases", func(t *testing.T) {
-		oas := prepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
+		oas := PrepareOASFromFile(t, "./mocks/nestedPathsConfig.json")
 		OASRouter := oas.PrepareOASRouter()
 
 		found, err := oas.FindPermission(OASRouter, "/not/existing/route", "GET")
@@ -352,7 +354,7 @@ func TestFindPermission(t *testing.T) {
 	})
 
 	t.Run("encoded cases", func(t *testing.T) {
-		oas := prepareOASFromFile(t, "./mocks/mockForEncodedTest.json")
+		oas := PrepareOASFromFile(t, "./mocks/mockForEncodedTest.json")
 		OASRouter := oas.PrepareOASRouter()
 
 		found, err := oas.FindPermission(OASRouter, "/api/backend/projects/5df2260277baff0011fde823/branches/team-james/files/config-extension%252Fcms-backend%252FcmsProperties.json", "POST")
@@ -378,21 +380,5 @@ func TestGetXPermission(t *testing.T) {
 		permission, err := GetXPermission(ctx)
 		require.True(t, err == nil, "Unexpected error.")
 		require.True(t, permission != nil, "XPermission not found.")
-	})
-}
-
-func TestGetPolicyEvaluators(t *testing.T) {
-	t.Run(`GetPolicyEvaluators fails because no key has been passed`, func(t *testing.T) {
-		ctx := context.Background()
-		env, err := GetPartialResultsEvaluators(ctx)
-		require.True(t, err != nil, "An error was expected.")
-		t.Logf("Expected error: %s - env: %+v", err.Error(), env)
-	})
-
-	t.Run(`GetPartialResultsEvaluators returns PartialResultsEvaluators from context`, func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), PartialResultsEvaluatorConfigKey{}, PartialResultsEvaluators{})
-		opaEval, err := GetPartialResultsEvaluators(ctx)
-		require.True(t, err == nil, "Unexpected error.")
-		require.True(t, opaEval != nil, "OPA Module config not found.")
 	})
 }

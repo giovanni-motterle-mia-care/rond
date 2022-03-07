@@ -1,4 +1,4 @@
-package main
+package opaevaluator
 
 import (
 	"bytes"
@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/opatranslator"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/custom_builtins"
 
@@ -29,7 +32,7 @@ type Evaluator interface {
 	Partial(ctx context.Context) (*rego.PartialQueries, error)
 }
 
-var unknowns = []string{"data.resources"}
+var Unknowns = []string{"data.resources"}
 
 type OPAEvaluator struct {
 	PolicyEvaluator Evaluator
@@ -43,7 +46,33 @@ type PartialEvaluator struct {
 	PartialEvaluator *rego.PartialResult
 }
 
-func setupEvaluators(ctx context.Context, mongoClient types.IMongoClient, oas *OpenAPISpec, opaModuleConfig *OPAModuleConfig) (PartialResultsEvaluators, error) {
+type Input struct {
+	Request    InputRequest  `json:"request"`
+	Response   InputResponse `json:"response"`
+	User       InputUser     `json:"user"`
+	ClientType string        `json:"clientType"`
+}
+type InputRequest struct {
+	Method     string            `json:"method"`
+	Path       string            `json:"path"`
+	Body       interface{}       `json:"body"`
+	Headers    http.Header       `json:"headers"`
+	Query      url.Values        `json:"query"`
+	PathParams map[string]string `json:"pathParams"`
+}
+
+type InputResponse struct {
+	Body interface{} `json:"body"`
+}
+
+type InputUser struct {
+	Properties map[string]interface{} `json:"properties"`
+	Groups     []string               `json:"groups"`
+	Bindings   []types.Binding        `json:"bindings"`
+	Roles      []types.Role           `json:"roles"`
+}
+
+func SetupEvaluators(ctx context.Context, mongoClient types.IMongoClient, oas *openapi.OpenAPISpec, opaModuleConfig *OPAModuleConfig) (PartialResultsEvaluators, error) {
 	policyEvaluators := PartialResultsEvaluators{}
 	for path, OASContent := range oas.Paths {
 		for verb, xPermission := range OASContent {
@@ -94,7 +123,6 @@ func setupEvaluators(ctx context.Context, mongoClient types.IMongoClient, oas *O
 }
 
 func NewOPAEvaluator(ctx context.Context, policy string, opaModuleConfig *OPAModuleConfig, input []byte) (*OPAEvaluator, error) {
-
 	inputTerm, err := ast.ParseTerm(string(input))
 	if err != nil {
 		return nil, fmt.Errorf("failed input parse: %v", err)
@@ -106,7 +134,7 @@ func NewOPAEvaluator(ctx context.Context, policy string, opaModuleConfig *OPAMod
 		rego.Query(queryString),
 		rego.Module(opaModuleConfig.Name, opaModuleConfig.Content),
 		rego.ParsedInput(inputTerm.Value),
-		rego.Unknowns(unknowns),
+		rego.Unknowns(Unknowns),
 		rego.Capabilities(ast.CapabilitiesForThisVersion()),
 		custom_builtins.GetHeaderFunction,
 		custom_builtins.MongoFindOne,
@@ -119,7 +147,7 @@ func NewOPAEvaluator(ctx context.Context, policy string, opaModuleConfig *OPAMod
 	}, nil
 }
 
-func createQueryEvaluator(ctx context.Context, logger *logrus.Entry, req *http.Request, env config.EnvironmentVariables, policy string, input []byte, responseBody interface{}) (*OPAEvaluator, error) {
+func CreateQueryEvaluator(ctx context.Context, logger *logrus.Entry, req *http.Request, env config.EnvironmentVariables, policy string, input []byte, responseBody interface{}) (*OPAEvaluator, error) {
 	opaModuleConfig, err := GetOPAModuleConfig(req.Context())
 	if err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("no OPA module configuration found in context")
@@ -151,7 +179,7 @@ func NewPartialResultEvaluator(ctx context.Context, policy string, opaModuleConf
 	options := []func(*rego.Rego){
 		rego.Query(queryString),
 		rego.Module(opaModuleConfig.Name, opaModuleConfig.Content),
-		rego.Unknowns(unknowns),
+		rego.Unknowns(Unknowns),
 		rego.Capabilities(ast.CapabilitiesForThisVersion()),
 		custom_builtins.GetHeaderFunction,
 	}
@@ -205,7 +233,7 @@ func (evaluator *OPAEvaluator) partiallyEvaluate(logger *logrus.Entry) (primitiv
 	return q, nil
 }
 
-func (evaluator *OPAEvaluator) evaluate(logger *logrus.Entry) (interface{}, error) {
+func (evaluator *OPAEvaluator) Evaluate(logger *logrus.Entry) (interface{}, error) {
 	opaEvaluationTime := time.Now()
 	results, err := evaluator.PolicyEvaluator.Eval(evaluator.Context)
 	if err != nil {
@@ -238,24 +266,24 @@ func (evaluator *OPAEvaluator) evaluate(logger *logrus.Entry) (interface{}, erro
 	return nil, fmt.Errorf("RBAC policy evaluation failed, user is not allowed")
 }
 
-func (evaluator *OPAEvaluator) PolicyEvaluation(logger *logrus.Entry, permission *XPermission) (interface{}, primitive.M, error) {
+func (evaluator *OPAEvaluator) PolicyEvaluation(logger *logrus.Entry, permission *openapi.XPermission) (interface{}, primitive.M, error) {
 	if permission.ResourceFilter.RowFilter.Enabled {
 		query, err := evaluator.partiallyEvaluate(logger)
 		return nil, query, err
 	}
-	dataFromEvaluation, err := evaluator.evaluate(logger)
+	dataFromEvaluation, err := evaluator.Evaluate(logger)
 	if err != nil {
 		return nil, nil, err
 	}
 	return dataFromEvaluation, nil, nil
 }
 
-func createRegoQueryInput(req *http.Request, env config.EnvironmentVariables, user types.User, responseBody interface{}) ([]byte, error) {
+func CreateRegoQueryInput(req *http.Request, env config.EnvironmentVariables, user types.User, responseBody interface{}) ([]byte, error) {
 	requestContext := req.Context()
 	logger := glogger.Get(requestContext)
 	opaInputCreationTime := time.Now()
 	userProperties := make(map[string]interface{})
-	_, err := unmarshalHeader(req.Header, env.UserPropertiesHeader, &userProperties)
+	_, err := utils.UnmarshalHeader(req.Header, env.UserPropertiesHeader, &userProperties)
 	if err != nil {
 		return nil, fmt.Errorf("user properties header is not valid: %s", err.Error())
 	}
@@ -286,7 +314,7 @@ func createRegoQueryInput(req *http.Request, env config.EnvironmentVariables, us
 		},
 	}
 
-	shouldParseJSONBody := hasApplicationJSONContentType(req.Header) &&
+	shouldParseJSONBody := utils.HasApplicationJSONContentType(req.Header) &&
 		req.ContentLength > 0 &&
 		(req.Method == http.MethodPatch || req.Method == http.MethodPost || req.Method == http.MethodPut)
 

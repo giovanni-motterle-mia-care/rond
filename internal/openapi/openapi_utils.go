@@ -1,4 +1,4 @@
-package main
+package openapi
 
 import (
 	"context"
@@ -7,17 +7,19 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
 
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/bunrouter"
 )
+
+const HTTPScheme = "http"
 
 const ALL_METHODS = "ALL"
 
@@ -54,32 +56,6 @@ type OpenAPISpec struct {
 	Paths OpenAPIPaths `json:"paths"`
 }
 
-type Input struct {
-	Request    InputRequest  `json:"request"`
-	Response   InputResponse `json:"response"`
-	User       InputUser     `json:"user"`
-	ClientType string        `json:"clientType"`
-}
-type InputRequest struct {
-	Method     string            `json:"method"`
-	Path       string            `json:"path"`
-	Body       interface{}       `json:"body"`
-	Headers    http.Header       `json:"headers"`
-	Query      url.Values        `json:"query"`
-	PathParams map[string]string `json:"pathParams"`
-}
-
-type InputResponse struct {
-	Body interface{} `json:"body"`
-}
-
-type InputUser struct {
-	Properties map[string]interface{} `json:"properties"`
-	Groups     []string               `json:"groups"`
-	Bindings   []types.Binding        `json:"bindings"`
-	Roles      []types.Role           `json:"roles"`
-}
-
 func cleanWildcard(path string) string {
 	if strings.HasSuffix(path, "*") {
 		// is a wildcard parameter that matches everything and must always be at the end of the route
@@ -112,7 +88,7 @@ func (oas *OpenAPISpec) PrepareOASRouter() *bunrouter.CompatRouter {
 	routeMap := oas.createRoutesMap()
 	for OASPath, OASContent := range oas.Paths {
 
-		OASPathCleaned := convertPathVariablesToColons(cleanWildcard(OASPath))
+		OASPathCleaned := utils.ConvertPathVariablesToColons(cleanWildcard(OASPath))
 		for method, methodContent := range OASContent {
 			scopedMethod := strings.ToUpper(method)
 			scopedMethodContent := methodContent
@@ -175,43 +151,43 @@ func (oas *OpenAPISpec) FindPermission(OASRouter *bunrouter.CompatRouter, path s
 	}, nil
 }
 
-func fetchOpenAPI(url string) (*OpenAPISpec, error) {
+func FetchOpenAPI(url string) (*OpenAPISpec, error) {
 	resp, err := http.DefaultClient.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrRequestFailed, err)
+		return nil, fmt.Errorf("%w: %s", types.ErrRequestFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: invalid status code %d", ErrRequestFailed, resp.StatusCode)
+		return nil, fmt.Errorf("%w: invalid status code %d", types.ErrRequestFailed, resp.StatusCode)
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(resp.Body)
 
 	var oas OpenAPISpec
 	if err := json.Unmarshal(bodyBytes, &oas); err != nil {
-		return nil, fmt.Errorf("%w: unmarshal error: %s", ErrRequestFailed, err.Error())
+		return nil, fmt.Errorf("%w: unmarshal error: %s", types.ErrRequestFailed, err.Error())
 	}
 	return &oas, nil
 }
 
-func loadOASFile(APIPermissionsFilePath string) (*OpenAPISpec, error) {
+func LoadOASFile(APIPermissionsFilePath string) (*OpenAPISpec, error) {
 	fileContentByte, err := ioutil.ReadFile(APIPermissionsFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrFileLoadFailed, err.Error())
+		return nil, fmt.Errorf("%w: %s", types.ErrFileLoadFailed, err.Error())
 	}
 
 	var oas OpenAPISpec
 	if err := json.Unmarshal(fileContentByte, &oas); err != nil {
-		return nil, fmt.Errorf("%w: unmarshal error: %s", ErrFileLoadFailed, err.Error())
+		return nil, fmt.Errorf("%w: unmarshal error: %s", types.ErrFileLoadFailed, err.Error())
 	}
 
 	return &oas, nil
 }
 
-func loadOAS(log *logrus.Logger, env config.EnvironmentVariables) (*OpenAPISpec, error) {
+func LoadOAS(log *logrus.Logger, env config.EnvironmentVariables) (*OpenAPISpec, error) {
 	if env.APIPermissionsFilePath != "" {
-		oas, err := loadOASFile(env.APIPermissionsFilePath)
+		oas, err := LoadOASFile(env.APIPermissionsFilePath)
 		if err != nil {
 			log.WithFields(logrus.Fields{
 				"APIPermissionsFilePath": env.APIPermissionsFilePath,
@@ -226,7 +202,7 @@ func loadOAS(log *logrus.Logger, env config.EnvironmentVariables) (*OpenAPISpec,
 		var oas *OpenAPISpec
 		documentationURL := fmt.Sprintf("%s://%s%s", HTTPScheme, env.TargetServiceHost, env.TargetServiceOASPath)
 		for {
-			fetchedOAS, err := fetchOpenAPI(documentationURL)
+			fetchedOAS, err := FetchOpenAPI(documentationURL)
 			if err != nil {
 				log.WithFields(logrus.Fields{
 					"targetServiceHost": env.TargetServiceHost,

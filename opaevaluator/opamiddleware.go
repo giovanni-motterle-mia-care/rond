@@ -1,8 +1,7 @@
-package main
+package opaevaluator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -11,16 +10,12 @@ import (
 	"strings"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
 
 	"github.com/gorilla/mux"
 	"github.com/mia-platform/glogger/v2"
 	"github.com/sirupsen/logrus"
-)
-
-var (
-	ErrRequestFailed  = errors.New("request failed")
-	ErrFileLoadFailed = errors.New("file loading failed")
 )
 
 type OPAModuleConfigKey struct{}
@@ -30,7 +25,13 @@ type OPAModuleConfig struct {
 	Content string
 }
 
-func OPAMiddleware(opaModuleConfig *OPAModuleConfig, openAPISpec *OpenAPISpec, envs *config.EnvironmentVariables, policyEvaluators PartialResultsEvaluators) mux.MiddlewareFunc {
+func OPAMiddleware(
+	opaModuleConfig *OPAModuleConfig,
+	openAPISpec *openapi.OpenAPISpec,
+	envs *config.EnvironmentVariables,
+	policyEvaluators PartialResultsEvaluators,
+	statusRoutes []string,
+) mux.MiddlewareFunc {
 	OASrouter := openAPISpec.PrepareOASRouter()
 
 	return func(next http.Handler) http.Handler {
@@ -66,11 +67,11 @@ func OPAMiddleware(opaModuleConfig *OPAModuleConfig, openAPISpec *OpenAPISpec, e
 					errorMessage = "The request doesn't match any known API"
 				}
 				glogger.Get(r.Context()).WithFields(fields).Errorf(errorMessage)
-				failResponseWithCode(w, http.StatusForbidden, technicalError, errorMessage)
+				utils.FailResponseWithCode(w, http.StatusForbidden, technicalError, errorMessage)
 				return
 			}
 
-			ctx := WithXPermission(
+			ctx := openapi.WithXPermission(
 				WithOPAModuleConfig(
 					WithPartialResultsEvaluators(
 						r.Context(),
@@ -85,7 +86,7 @@ func OPAMiddleware(opaModuleConfig *OPAModuleConfig, openAPISpec *OpenAPISpec, e
 	}
 }
 
-func loadRegoModule(rootDirectory string) (*OPAModuleConfig, error) {
+func LoadRegoModule(rootDirectory string) (*OPAModuleConfig, error) {
 	var regoModulePath string
 	filepath.Walk(rootDirectory, func(path string, info os.FileInfo, err error) error {
 		if regoModulePath != "" {

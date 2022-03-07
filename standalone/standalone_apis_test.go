@@ -1,4 +1,4 @@
-package main
+package standalone
 
 import (
 	"bytes"
@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
@@ -18,7 +20,7 @@ import (
 )
 
 func TestRevokeHandler(t *testing.T) {
-	ctx := createContext(t,
+	ctx := testutils.CreateContext(t,
 		context.Background(),
 		config.EnvironmentVariables{BindingsCrudServiceURL: "http://crud-service/bindings/"},
 		nil,
@@ -36,7 +38,7 @@ func TestRevokeHandler(t *testing.T) {
 		req := requestWithParams(t, ctx, http.MethodPost, "/", bytes.NewBuffer(reqBody), nil)
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusBadRequest)
 	})
@@ -51,7 +53,7 @@ func TestRevokeHandler(t *testing.T) {
 		assert.NilError(t, err, "unexpcted error")
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusBadRequest)
 	})
@@ -75,7 +77,7 @@ func TestRevokeHandler(t *testing.T) {
 		req := requestWithParams(t, ctx, http.MethodPost, "/", bytes.NewBuffer(reqBody), nil)
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusInternalServerError)
 	})
@@ -114,7 +116,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusInternalServerError)
 	})
@@ -158,7 +160,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 	})
@@ -207,7 +209,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 	})
@@ -256,7 +258,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 	})
@@ -318,7 +320,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 	})
@@ -402,7 +404,7 @@ func TestRevokeHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		revokeHandler(w, req)
+		RevokeHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusOK)
 
@@ -413,7 +415,7 @@ func TestRevokeHandler(t *testing.T) {
 }
 
 func TestGrantHandler(t *testing.T) {
-	ctx := createContext(t,
+	ctx := testutils.CreateContext(t,
 		context.Background(),
 		config.EnvironmentVariables{BindingsCrudServiceURL: "http://crud-service/bindings/"},
 		nil,
@@ -433,7 +435,7 @@ func TestGrantHandler(t *testing.T) {
 		assert.NilError(t, err, "unexpcted error")
 		w := httptest.NewRecorder()
 
-		grantHandler(w, req)
+		GrantHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusBadRequest)
 	})
@@ -446,7 +448,7 @@ func TestGrantHandler(t *testing.T) {
 		assert.NilError(t, err, "unexpcted error")
 		w := httptest.NewRecorder()
 
-		grantHandler(w, req)
+		GrantHandler(w, req)
 
 		assert.Equal(t, w.Result().StatusCode, http.StatusBadRequest)
 	})
@@ -493,7 +495,7 @@ func TestGrantHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		grantHandler(w, req)
+		GrantHandler(w, req)
 
 		var response GrantResponseBody
 		err := json.NewDecoder(w.Body).Decode(&response)
@@ -545,7 +547,7 @@ func TestGrantHandler(t *testing.T) {
 		})
 		w := httptest.NewRecorder()
 
-		grantHandler(w, req)
+		GrantHandler(w, req)
 		assert.Equal(t, w.Result().StatusCode, http.StatusInternalServerError)
 	})
 }

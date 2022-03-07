@@ -16,13 +16,13 @@ import (
 	"git.tools.mia-platform.eu/platform/core/rbac-service/helpers"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 
 	"github.com/gorilla/mux"
 	"github.com/mia-platform/glogger/v2"
 	"github.com/sirupsen/logrus"
 )
-
-const HTTPScheme = "http"
 
 func main() {
 	entrypoint(make(chan os.Signal, 1))
@@ -46,7 +46,7 @@ func entrypoint(shutdown chan os.Signal) {
 		return
 	}
 
-	opaModuleConfig, err := loadRegoModule(env.OPAModulesDirectory)
+	opaModuleConfig, err := opaevaluator.LoadRegoModule(env.OPAModulesDirectory)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"error":        logrus.Fields{"message": err.Error()},
@@ -56,7 +56,7 @@ func entrypoint(shutdown chan os.Signal) {
 	}
 	log.WithField("opaModuleFileName", opaModuleConfig.Name).Trace("rego module successfully loaded")
 
-	oas, err := loadOAS(log, env)
+	oas, err := openapi.LoadOAS(log, env)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"error": logrus.Fields{"message": err.Error()},
@@ -76,7 +76,7 @@ func entrypoint(shutdown chan os.Signal) {
 
 	ctx := glogger.WithLogger(mongoclient.WithMongoClient(context.Background(), mongoClient), logrus.NewEntry(log))
 
-	policiesEvaluators, err := setupEvaluators(ctx, mongoClient, oas, opaModuleConfig)
+	policiesEvaluators, err := opaevaluator.SetupEvaluators(ctx, mongoClient, oas, opaModuleConfig)
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"error": logrus.Fields{"message": err.Error()},
@@ -120,9 +120,9 @@ func entrypoint(shutdown chan os.Signal) {
 func setupRouter(
 	log *logrus.Logger,
 	env config.EnvironmentVariables,
-	opaModuleConfig *OPAModuleConfig,
-	oas *OpenAPISpec,
-	policiesEvaluators PartialResultsEvaluators,
+	opaModuleConfig *opaevaluator.OPAModuleConfig,
+	oas *openapi.OpenAPISpec,
+	policiesEvaluators opaevaluator.PartialResultsEvaluators,
 	mongoClient *mongoclient.MongoClient,
 ) (*mux.Router, error) {
 	router := mux.NewRouter()
@@ -137,7 +137,7 @@ func setupRouter(
 		evalRouter = router.NewRoute().Subrouter()
 	}
 
-	evalRouter.Use(OPAMiddleware(opaModuleConfig, oas, &env, policiesEvaluators))
+	evalRouter.Use(opaevaluator.OPAMiddleware(opaModuleConfig, oas, &env, policiesEvaluators, statusRoutes))
 
 	if mongoClient != nil {
 		evalRouter.Use(mongoclient.MongoClientInjectorMiddleware(mongoClient))
