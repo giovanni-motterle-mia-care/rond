@@ -7,14 +7,17 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/crudclient"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/types"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/mia-platform/glogger/v2"
 	"github.com/sirupsen/logrus"
 )
+
+// TODO: handle pagination!
+const BINDINGS_MAX_PAGE_SIZE = 200
 
 type RevokeRequestBody struct {
 	Subjects    []string `json:"subjects,omitempty"`
@@ -67,7 +70,7 @@ func RevokeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := client.Get(r.Context(), fmt.Sprintf("_q=%s", string(query)), &bindings); err != nil {
+	if err := client.Get(r.Context(), fmt.Sprintf("_q=%s&_l=%d", string(query), BINDINGS_MAX_PAGE_SIZE), &bindings); err != nil {
 		logger.WithField("error", logrus.Fields{"message": err.Error()}).Error("failed crud request")
 		utils.FailResponseWithCode(w, http.StatusInternalServerError, "failed crud request for finding bindings", types.GENERIC_BUSINESS_ERROR_MESSAGE)
 		return

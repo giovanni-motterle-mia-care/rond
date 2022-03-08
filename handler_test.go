@@ -18,10 +18,10 @@ import (
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mocks"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/types"
 
 	"github.com/gorilla/mux"
 	"github.com/mia-platform/glogger/v2"

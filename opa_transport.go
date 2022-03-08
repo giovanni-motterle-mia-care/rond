@@ -11,10 +11,10 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/mongoclient"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/utils"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/opaevaluator"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/openapi"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/types"
 
 	"github.com/sirupsen/logrus"
 )

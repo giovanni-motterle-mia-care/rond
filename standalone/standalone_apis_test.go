@@ -12,7 +12,7 @@ import (
 
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/config"
 	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/testutils"
-	"git.tools.mia-platform.eu/platform/core/rbac-service/internal/types"
+	"git.tools.mia-platform.eu/platform/core/rbac-service/types"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -143,7 +143,10 @@ func TestRevokeHandler(t *testing.T) {
 			AddMatcher(func(req *http.Request, greq *gock.Request) (bool, error) {
 				mongoQueryString := req.URL.Query().Get("_q")
 				match := mongoQueryString == `{"$and":[{"resource.resourceId":{"$in":["mike"]},"resource.resourceType":"project"},{"$or":[{"subjects":{"$in":["piero"]}}]}]}`
-				return match, nil
+
+				limit := req.URL.Query().Get("_l")
+				matchLimit := limit == "200"
+				return match && matchLimit, nil
 			}).
 			Reply(http.StatusOK).
 			JSON(bindingsFromCrud)
