@@ -7,13 +7,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
-#adasdasd
-##asdasda
-# asdasd
-# CONFLITTOTTTTTT
-#gadhdfhadf
-#adsfasdfas
-
 ### Added
 
  - [JAP-1](https://makeitapp.atlassian.net/browse/JAP-2): Added `/grant/bindings/resource/{resourceType}` api to handle the grant of a user role on a single resource
@@ -21,8 +14,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
  - [JAP-2](https://makeitapp.atlassian.net/browse/JAP-2): Added `/revoke/bindings/resource/{resourceType}` api to handle the revoke of a user role on a set resources
 
 ## 0.7.0 - 02/03/2022
-
-# ciao
 
 ### Fixed
 
