@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## 0.7.0 - 02/03/2022
 
+# ciao
+
 ### Fixed
 
  - [JAF-310](https://makeitapp.atlassian.net/browse/JAF-310): prevent response policy evaluation if API invocation has a status code outside the [200,299] range
